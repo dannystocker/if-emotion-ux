@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { OpenWebUIClient } from './services/openwebui';
-import { Session, Message, Role, UserSettings } from './types';
+import { Session, Message, Role, UserSettings, ExportFormat } from './types';
 import { generateId } from './utils';
 
 // Components
@@ -9,17 +9,31 @@ import { Sidebar } from './components/Sidebar';
 import { ChatMessage } from './components/ChatMessage';
 import { ChatInput } from './components/ChatInput';
 import { SettingsModal } from './components/SettingsModal';
+import { ExportModal } from './components/ExportModal';
 
 const App: React.FC = () => {
   // Config
   const [settings, setSettings] = useState<UserSettings>(() => {
-    const saved = localStorage.getItem('if.emotion.settings');
-    return saved ? JSON.parse(saved) : {
-      baseUrl: 'http://85.239.243.227:8080',
-      apiKey: 'sk-5339243764b840e69188d672802082f4' // Default from prompt
+    const defaultUrl = typeof window !== 'undefined' ? window.location.origin : 'https://85.239.243.227';
+    const defaults: UserSettings = {
+      baseUrl: defaultUrl,  // Use same origin - nginx proxies /v1/ to Claude Max API
+      apiKey: 'claude-max',  // Auth handled by Claude Max subscription
+      advancedMode: true  // Enable Sergio's personality DNA by default
     };
+    try {
+      const saved = localStorage.getItem('if.emotion.settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Merge with defaults to handle missing fields from old versions
+        return { ...defaults, ...parsed };
+      }
+    } catch (e) {
+      console.warn('Failed to parse settings from localStorage', e);
+    }
+    return defaults;
   });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
   const clientRef = useRef(new OpenWebUIClient(settings));
 
   // State
@@ -139,8 +153,8 @@ const App: React.FC = () => {
          await clientRef.current.addMessageToChat(currentSessionId, userMsg).catch(e => console.warn("Failed to persist user msg", e));
       }
 
-      // Select model
-      const model = availableModels[0] || 'gpt-3.5-turbo'; // Fallback
+      // Select model based on advanced mode setting
+      const model = settings.advancedMode ? 'sergio-rag' : 'claude-max';
 
       // Stream response
       const streamReader = await clientRef.current.sendMessage(
@@ -239,6 +253,109 @@ const App: React.FC = () => {
      }
   };
 
+  // Export Conversation
+  const handleExport = (format: ExportFormat) => {
+    if (messages.length === 0) {
+      alert('No messages to export');
+      return;
+    }
+
+    const timestamp = new Date().toISOString().slice(0, 10);
+    const filename = `if-emotion-chat-${timestamp}`;
+    let content: string;
+    let mimeType: string;
+    let extension: string;
+
+    switch (format) {
+      case 'json':
+        content = JSON.stringify({
+          exported: new Date().toISOString(),
+          sessionId: currentSessionId,
+          messages: messages.map(m => ({
+            role: m.role,
+            content: m.content,
+            timestamp: m.timestamp
+          }))
+        }, null, 2);
+        mimeType = 'application/json';
+        extension = 'json';
+        break;
+
+      case 'md':
+        content = `# if.emotion Chat Export\n\n*Exported: ${new Date().toLocaleString()}*\n\n---\n\n`;
+        content += messages.map(m => {
+          const role = m.role === Role.USER ? '**You**' : m.role === Role.ASSISTANT ? '**Sergio**' : '*System*';
+          return `${role}\n\n${m.content}\n\n---\n`;
+        }).join('\n');
+        mimeType = 'text/markdown';
+        extension = 'md';
+        break;
+
+      case 'txt':
+        content = `if.emotion Chat Export\nExported: ${new Date().toLocaleString()}\n${'='.repeat(50)}\n\n`;
+        content += messages.map(m => {
+          const role = m.role === Role.USER ? 'You' : m.role === Role.ASSISTANT ? 'Sergio' : 'System';
+          return `[${role}]\n${m.content}\n\n`;
+        }).join('');
+        mimeType = 'text/plain';
+        extension = 'txt';
+        break;
+
+      case 'pdf':
+        // For PDF, create a printable HTML and trigger print dialog
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+          const htmlContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>if.emotion Chat Export</title>
+              <style>
+                body { font-family: Georgia, serif; max-width: 800px; margin: 40px auto; padding: 20px; }
+                h1 { color: #5d4e37; border-bottom: 2px solid #5d4e37; padding-bottom: 10px; }
+                .message { margin: 20px 0; padding: 15px; border-radius: 8px; }
+                .user { background: #f5f0e8; }
+                .assistant { background: #e8ede5; }
+                .role { font-weight: bold; color: #5d4e37; margin-bottom: 8px; }
+                .meta { font-size: 12px; color: #888; margin-top: 20px; }
+              </style>
+            </head>
+            <body>
+              <h1>if.emotion Chat Export</h1>
+              ${messages.map(m => `
+                <div class="message ${m.role}">
+                  <div class="role">${m.role === Role.USER ? 'You' : m.role === Role.ASSISTANT ? 'Sergio' : 'System'}</div>
+                  <div>${m.content.replace(/\n/g, '<br>')}</div>
+                </div>
+              `).join('')}
+              <div class="meta">Exported: ${new Date().toLocaleString()}</div>
+            </body>
+            </html>
+          `;
+          printWindow.document.write(htmlContent);
+          printWindow.document.close();
+          printWindow.print();
+        }
+        setIsExportOpen(false);
+        return;
+
+      default:
+        return;
+    }
+
+    // Download file
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}.${extension}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setIsExportOpen(false);
+  };
+
   // Scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -260,12 +377,13 @@ const App: React.FC = () => {
 
       {/* Main Content */}
       <div className={`flex-1 flex flex-col h-full transition-all duration-300 ${isSidebarOpen ? 'md:ml-[280px]' : ''}`}>
-        <JourneyHeader 
+        <JourneyHeader
           sessionCount={sessions.length}
           isOffTheRecord={isOffTheRecord}
           onToggleOffTheRecord={handleTogglePrivacy}
           onOpenSidebar={() => setIsSidebarOpen(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenExport={() => setIsExportOpen(true)}
         />
 
         <main className="flex-1 overflow-y-auto">
@@ -298,11 +416,17 @@ const App: React.FC = () => {
         />
       </div>
 
-      <SettingsModal 
+      <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
         onSave={(s) => { setSettings(s); }}
+      />
+
+      <ExportModal
+        isOpen={isExportOpen}
+        onClose={() => setIsExportOpen(false)}
+        onExport={handleExport}
       />
     </div>
   );

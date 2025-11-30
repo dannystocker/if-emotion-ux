@@ -1,5 +1,6 @@
 import React from 'react';
-import { Menu, Settings } from 'lucide-react';
+import { Menu, Settings, Download } from 'lucide-react';
+// Export button v2
 import { OffTheRecordToggle } from './OffTheRecordToggle';
 
 interface Props {
@@ -8,14 +9,16 @@ interface Props {
   onToggleOffTheRecord: () => void;
   onOpenSidebar: () => void;
   onOpenSettings: () => void;
+  onOpenExport: () => void;
 }
 
-export function JourneyHeader({ 
-  sessionCount, 
-  isOffTheRecord, 
+export function JourneyHeader({
+  sessionCount,
+  isOffTheRecord,
   onToggleOffTheRecord,
   onOpenSidebar,
-  onOpenSettings
+  onOpenSettings,
+  onOpenExport
 }: Props) {
   return (
     <header className="sticky top-0 z-10 bg-sergio-50/95 backdrop-blur-sm border-b border-sergio-200 px-4 py-3">
@@ -39,14 +42,23 @@ export function JourneyHeader({
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <OffTheRecordToggle 
-            enabled={isOffTheRecord} 
-            onToggle={onToggleOffTheRecord} 
+        <div className="flex items-center gap-3">
+          <OffTheRecordToggle
+            enabled={isOffTheRecord}
+            onToggle={onToggleOffTheRecord}
           />
+          <button
+            onClick={onOpenExport}
+            className="p-2 text-sergio-400 hover:text-sergio-700 transition-colors"
+            title="Export conversation"
+            data-testid="export-btn"
+          >
+            <Download size={20} />
+          </button>
           <button
             onClick={onOpenSettings}
             className="p-2 text-sergio-400 hover:text-sergio-700 transition-colors"
+            title="Settings"
           >
             <Settings size={20} />
           </button>

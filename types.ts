@@ -41,6 +41,7 @@ export interface OpenWebUIConfig {
 export interface UserSettings {
   baseUrl: string;
   apiKey: string;
+  advancedMode: boolean;  // Enable Sergio's personality DNA (RAG)
 }
 
 export enum Language {
