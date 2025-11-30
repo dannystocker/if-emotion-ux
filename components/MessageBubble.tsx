@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import { Trash2, Heart, Leaf, HelpCircle, Download } from 'lucide-react';
 import { Role, Message, Language, AppMode } from '../types';
 import { TEXTS } from '../constants';
-import { getConversationalTime } from '../utils';
+import { formatConversationalTime } from '../utils';
 
 interface MessageBubbleProps {
   message: Message;
@@ -48,11 +48,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 ? 'bg-clay-600 text-white rounded-tr-sm'
                 : 'bg-white border border-earth-100 text-earth-900 rounded-tl-sm'
             }
-            ${message.isError ? 'border-red-300 bg-red-50 text-red-800' : ''}
+            ${message.error ? 'border-red-300 bg-red-50 text-red-800' : ''}
           `}
         >
           <div className={`prose prose-sm max-w-none ${isUser ? 'prose-invert' : 'prose-stone'}`}>
-              <ReactMarkdown>{message.text}</ReactMarkdown>
+              <ReactMarkdown>{message.content}</ReactMarkdown>
           </div>
 
           {/* Reactions Display */}
@@ -69,14 +69,14 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         
         <div className="flex items-center gap-3 mt-2 px-1 h-6">
              <span className={`text-[10px] uppercase tracking-wider opacity-50 font-medium ${isUser ? 'text-earth-600' : 'text-earth-400'}`}>
-                {isAdvanced ? getConversationalTime(message.timestamp, language) : message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {isAdvanced ? formatConversationalTime(message.timestamp) : message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
             
             {/* Action Bar */}
             <div className={`flex items-center gap-1 transition-opacity duration-200 ${showActions || (isAdvanced && !isUser) ? 'opacity-100' : 'opacity-0'}`}>
                 
                 {/* Export single message */}
-                {isAdvanced && !message.isError && (
+                {isAdvanced && !message.error && (
                     <button
                         onClick={() => onExport(message)}
                         className="text-earth-400 hover:text-earth-700 p-1 rounded hover:bg-earth-100 transition-colors"
@@ -86,7 +86,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                     </button>
                 )}
 
-                {!message.isError && (
+                {!message.error && (
                     <button
                         onClick={() => onDelete(message.id)}
                         className="text-earth-400 hover:text-red-400 p-1 rounded hover:bg-red-50 transition-colors"
@@ -96,7 +96,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                     </button>
                 )}
 
-                {isAdvanced && !isUser && !message.isError && (
+                {isAdvanced && !isUser && !message.error && (
                     <div className="flex items-center gap-0.5 pl-1 border-l border-earth-200/50 ml-1">
                         <button 
                             onClick={() => onReact(message.id, 'heart')} 

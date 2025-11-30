@@ -1,24 +1,31 @@
 
 export enum Role {
   USER = 'user',
-  MODEL = 'model',
+  ASSISTANT = 'assistant',
+  SYSTEM = 'system'
 }
 
 export interface Message {
-  id: string;
+  id: string; // Internal UUID
   role: Role;
-  text: string;
+  content: string;
   timestamp: Date;
-  isError?: boolean;
+  // For UI state
+  pending?: boolean;
+  error?: boolean;
   reactions?: string[];
+}
+
+export interface OpenWebUIMessage {
+  role: string;
+  content: string;
 }
 
 export interface Session {
   id: string;
-  folderId?: string; // Optional folder association
   title: string;
-  messages: Message[];
-  updatedAt: Date;
+  updated_at: number; // Unix timestamp
+  folder_id?: string;
 }
 
 export interface Folder {
@@ -26,25 +33,24 @@ export interface Folder {
   name: string;
 }
 
+export interface OpenWebUIConfig {
+  baseUrl: string;
+  apiKey: string;
+}
+
+export interface UserSettings {
+  baseUrl: string;
+  apiKey: string;
+}
+
 export enum Language {
   EN = 'en',
   ES = 'es',
-  FR = 'fr',
 }
 
 export enum AppMode {
   SIMPLE = 'simple',
-  ADVANCED = 'advanced',
+  ADVANCED = 'advanced'
 }
 
-export interface UIString {
-  en: string;
-  es: string;
-  fr: string;
-}
-
-export type LocalizedStrings = {
-  [key: string]: UIString;
-};
-
-export type ExportFormat = 'json' | 'md' | 'txt' | 'pdf';
+export type ExportFormat = 'json' | 'txt' | 'md' | 'pdf';

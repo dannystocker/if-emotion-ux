@@ -1,5 +1,5 @@
 {
   "name": "if.emotion",
-  "description": "A private, bilingual emotional wellness companion designed for the journey of the soul. Features secure message handling and exportable history.",
+  "description": "A private, bilingual psychology companion designed for the journey of the soul. Connects to Open WebUI.",
   "requestFramePermissions": []
 }

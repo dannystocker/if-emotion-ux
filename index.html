@@ -5,38 +5,40 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>if.emotion</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@tailwindcss/typography@0.5.10/dist/typography.min.js"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
-            fontFamily: {
-              serif: ['Merriweather', 'serif'],
-              sans: ['Inter', 'sans-serif'],
-            },
             colors: {
-              earth: {
-                50: '#faf9f6',
-                100: '#f5f2eb',
-                200: '#e6e0d2',
-                300: '#d2c6b0',
-                400: '#bcab8e',
-                500: '#a89070',
-                600: '#8c7558',
-                700: '#705c46',
-                800: '#5e4d3d',
-                900: '#4d4035',
+              sergio: {
+                50: '#FFF8DC',   // Cornsilk (lightest background)
+                100: '#FAF0E6',  // Linen (surface)
+                200: '#F5DEB3',  // Wheat (user messages)
+                300: '#FFE4B5',  // Moccasin (AI messages)
+                400: '#CD853F',  // Peru (accent)
+                500: '#D2691E',  // Chocolate (secondary)
+                600: '#8B4513',  // Saddle brown (primary)
+                700: '#654321',  // Dark brown
+                800: '#2F4F4F',  // Dark slate gray (text)
+                900: '#1C1C1C',  // Almost black (emphasis)
               },
-              clay: {
-                100: '#fcf2ea',
-                200: '#f6dec9',
-                300: '#efc2a0',
-                400: '#e69e70',
-                500: '#dd7b46',
-                600: '#cf5e32',
-                700: '#ac4625',
-                800: '#8c3b24',
-                900: '#723422',
+              privacy: {
+                active: '#8B0000',   // Dark red (off-the-record indicator)
+                muted: '#A9A9A9',    // Gray (inactive state)
               }
+            },
+            fontFamily: {
+              'spanish': ['Merriweather', 'serif'],  // Emotional warmth
+              'english': ['Inter', 'sans-serif'],    // Technical clarity
+              'mono': ['JetBrains Mono', 'monospace'],
+            },
+            spacing: {
+              'conversation': '1.5rem',
+              'message': '1rem 1.5rem',
+            },
+            borderRadius: {
+              'message': '1.25rem',
             },
             animation: {
               'fade-in': 'fadeIn 0.5s ease-out forwards',
@@ -53,49 +55,54 @@
               }
             }
           }
-        }
+        },
+        plugins: [
+          function({ addBase, theme }) {
+            addBase({
+              'body': { 
+                backgroundColor: theme('colors.sergio.50'), 
+                color: theme('colors.sergio.800'),
+                fontFamily: theme('fontFamily.english'),
+              },
+            })
+          }
+        ]
       }
     </script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300;1,400&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <script type="importmap">
+{
+  "imports": {
+    "react-dom/client": "https://aistudiocdn.com/react-dom@^19.2.0/client",
+    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react/jsx-runtime": "https://aistudiocdn.com/react@^19.2.0/jsx-runtime",
+    "react-markdown": "https://aistudiocdn.com/react-markdown@^9.0.1",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.344.0",
+    "jspdf": "https://aistudiocdn.com/jspdf@^2.5.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/"
+  }
+}
+</script>
     <style>
-      body {
-        font-family: 'Inter', sans-serif;
-        background-color: #faf9f6; /* earth-50 */
-        background-image: radial-gradient(#e6e0d2 1px, transparent 1px);
-        background-size: 24px 24px;
-      }
-      .font-serif {
-        font-family: 'Merriweather', serif;
-      }
       /* Custom scrollbar for minimalist look */
       ::-webkit-scrollbar {
-        width: 8px;
+        width: 6px;
       }
       ::-webkit-scrollbar-track {
         background: transparent;
       }
       ::-webkit-scrollbar-thumb {
-        background: #d2c6b0;
+        background: #D2691E; /* sergio-500 */
         border-radius: 4px;
+        opacity: 0.5;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #bcab8e;
+        background: #8B4513;
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react-markdown": "https://aistudiocdn.com/react-markdown@^10.1.0",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "jspdf": "https://aistudiocdn.com/jspdf@^2.5.1"
-  }
-}
-</script>
-</head>
+  </head>
   <body>
     <div id="root"></div>
   </body>
