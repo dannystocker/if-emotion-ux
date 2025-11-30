@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { OpenWebUIClient } from './services/openwebui';
-import { Session, Message, Role, UserSettings, ExportFormat } from './types';
+import { Session, Message, Role, UserSettings, Language } from './types';
 import { generateId } from './utils';
 
 // Components
@@ -10,28 +10,19 @@ import { ChatMessage } from './components/ChatMessage';
 import { ChatInput } from './components/ChatInput';
 import { SettingsModal } from './components/SettingsModal';
 import { ExportModal } from './components/ExportModal';
+import { jsPDF } from 'jspdf';
 
 const App: React.FC = () => {
   // Config
   const [settings, setSettings] = useState<UserSettings>(() => {
-    const defaultUrl = typeof window !== 'undefined' ? window.location.origin : 'https://85.239.243.227';
-    const defaults: UserSettings = {
-      baseUrl: defaultUrl,  // Use same origin - nginx proxies /v1/ to Claude Max API
-      apiKey: 'claude-max',  // Auth handled by Claude Max subscription
-      advancedMode: true  // Enable Sergio's personality DNA by default
+    const saved = localStorage.getItem('if.emotion.settings');
+    return saved ? JSON.parse(saved) : {
+      baseUrl: 'http://85.239.243.227:8080',
+      apiKey: 'sk-5339243764b840e69188d672802082f4'
     };
-    try {
-      const saved = localStorage.getItem('if.emotion.settings');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        // Merge with defaults to handle missing fields from old versions
-        return { ...defaults, ...parsed };
-      }
-    } catch (e) {
-      console.warn('Failed to parse settings from localStorage', e);
-    }
-    return defaults;
   });
+  
+  const [selectedModel, setSelectedModel] = useState<string>('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const clientRef = useRef(new OpenWebUIClient(settings));
@@ -61,6 +52,9 @@ const App: React.FC = () => {
   const loadModels = async () => {
     const models = await clientRef.current.getModels();
     setAvailableModels(models);
+    if (models.length > 0 && !selectedModel) {
+      setSelectedModel(models[0]);
+    }
   };
 
   // Load Sessions
@@ -68,10 +62,10 @@ const App: React.FC = () => {
     try {
       const list = await clientRef.current.getChats();
       setSessions(list);
+      // Only auto-load if we have no current session and aren't in privacy mode
       if (list.length > 0 && !currentSessionId && !isOffTheRecord) {
          loadSession(list[0].id);
-      } else if (list.length === 0 && !isOffTheRecord) {
-         // Create initial persistent session if none exist
+      } else if (list.length === 0 && !isOffTheRecord && !currentSessionId) {
          startNewSession();
       }
     } catch (e) {
@@ -127,6 +121,7 @@ const App: React.FC = () => {
       }]);
     } else {
       // Switching back to Normal
+      setIsOffTheRecord(false);
       if (sessions.length > 0) {
         loadSession(sessions[0].id);
       } else {
@@ -153,15 +148,14 @@ const App: React.FC = () => {
          await clientRef.current.addMessageToChat(currentSessionId, userMsg).catch(e => console.warn("Failed to persist user msg", e));
       }
 
-      // Select model based on advanced mode setting
-      const model = settings.advancedMode ? 'sergio-rag' : 'claude-max';
-
       // Stream response
+      const modelToUse = selectedModel || availableModels[0] || 'gpt-3.5-turbo';
+      
       const streamReader = await clientRef.current.sendMessage(
         currentSessionId,
         text,
         messages, // Context
-        model,
+        modelToUse,
         isOffTheRecord
       );
 
@@ -183,8 +177,6 @@ const App: React.FC = () => {
         if (done) break;
         
         const chunk = decoder.decode(value);
-        // OpenWebUI streaming format parsing depends on endpoint type (OpenAI compatible usually sends "data: JSON")
-        // Simple parser for standard SSE lines:
         const lines = chunk.split('\n');
         for (const line of lines) {
            if (line.startsWith('data: ')) {
@@ -208,8 +200,7 @@ const App: React.FC = () => {
       if (!isOffTheRecord && currentSessionId) {
          const completedBotMsg = { ...botMsg, content: fullContent };
          await clientRef.current.addMessageToChat(currentSessionId, completedBotMsg).catch(e => console.warn("Failed to persist bot msg", e));
-         // Refresh session list to update timestamp
-         loadSessions();
+         loadSessions(); // Update timestamp
       }
 
     } catch (e) {
@@ -228,9 +219,7 @@ const App: React.FC = () => {
 
   // Delete Message (Silent)
   const handleDeleteMessage = async (msgId: string) => {
-    // Optimistic delete
     setMessages(prev => prev.filter(m => m.id !== msgId));
-    
     if (!isOffTheRecord && currentSessionId) {
       try {
         await clientRef.current.deleteMessage(currentSessionId, msgId);
@@ -253,106 +242,61 @@ const App: React.FC = () => {
      }
   };
 
-  // Export Conversation
-  const handleExport = (format: ExportFormat) => {
-    if (messages.length === 0) {
-      alert('No messages to export');
-      return;
+  // Handle Export
+  const handleExport = (format: 'json' | 'txt' | 'md' | 'pdf') => {
+    if (!messages.length) return;
+    
+    const title = sessions.find(s => s.id === currentSessionId)?.title || 'if-emotion-session';
+    const filename = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.${format}`;
+    
+    let content = '';
+
+    if (format === 'json') {
+      content = JSON.stringify(messages, null, 2);
+    } else if (format === 'md') {
+      content = `# ${title}\n\n` + messages.map(m => `**${m.role === 'user' ? 'You' : 'Sergio'}**: ${m.content}\n`).join('\n');
+    } else if (format === 'txt') {
+      content = messages.map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n');
+    } else if (format === 'pdf') {
+       const doc = new jsPDF();
+       doc.setFontSize(16);
+       doc.text(title, 10, 10);
+       doc.setFontSize(12);
+       
+       let y = 20;
+       const margin = 10;
+       const pageWidth = doc.internal.pageSize.getWidth();
+       const maxLineWidth = pageWidth - margin * 2;
+
+       messages.forEach(msg => {
+           const role = msg.role === 'user' ? 'You' : 'Sergio';
+           const text = `${role}: ${msg.content}`;
+           const lines = doc.splitTextToSize(text, maxLineWidth);
+           
+           if (y + lines.length * 7 > doc.internal.pageSize.getHeight() - 10) {
+               doc.addPage();
+               y = 10;
+           }
+           
+           doc.text(lines, margin, y);
+           y += lines.length * 7 + 5;
+       });
+       doc.save(filename);
+       setIsExportOpen(false);
+       return;
     }
 
-    const timestamp = new Date().toISOString().slice(0, 10);
-    const filename = `if-emotion-chat-${timestamp}`;
-    let content: string;
-    let mimeType: string;
-    let extension: string;
-
-    switch (format) {
-      case 'json':
-        content = JSON.stringify({
-          exported: new Date().toISOString(),
-          sessionId: currentSessionId,
-          messages: messages.map(m => ({
-            role: m.role,
-            content: m.content,
-            timestamp: m.timestamp
-          }))
-        }, null, 2);
-        mimeType = 'application/json';
-        extension = 'json';
-        break;
-
-      case 'md':
-        content = `# if.emotion Chat Export\n\n*Exported: ${new Date().toLocaleString()}*\n\n---\n\n`;
-        content += messages.map(m => {
-          const role = m.role === Role.USER ? '**You**' : m.role === Role.ASSISTANT ? '**Sergio**' : '*System*';
-          return `${role}\n\n${m.content}\n\n---\n`;
-        }).join('\n');
-        mimeType = 'text/markdown';
-        extension = 'md';
-        break;
-
-      case 'txt':
-        content = `if.emotion Chat Export\nExported: ${new Date().toLocaleString()}\n${'='.repeat(50)}\n\n`;
-        content += messages.map(m => {
-          const role = m.role === Role.USER ? 'You' : m.role === Role.ASSISTANT ? 'Sergio' : 'System';
-          return `[${role}]\n${m.content}\n\n`;
-        }).join('');
-        mimeType = 'text/plain';
-        extension = 'txt';
-        break;
-
-      case 'pdf':
-        // For PDF, create a printable HTML and trigger print dialog
-        const printWindow = window.open('', '_blank');
-        if (printWindow) {
-          const htmlContent = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-              <title>if.emotion Chat Export</title>
-              <style>
-                body { font-family: Georgia, serif; max-width: 800px; margin: 40px auto; padding: 20px; }
-                h1 { color: #5d4e37; border-bottom: 2px solid #5d4e37; padding-bottom: 10px; }
-                .message { margin: 20px 0; padding: 15px; border-radius: 8px; }
-                .user { background: #f5f0e8; }
-                .assistant { background: #e8ede5; }
-                .role { font-weight: bold; color: #5d4e37; margin-bottom: 8px; }
-                .meta { font-size: 12px; color: #888; margin-top: 20px; }
-              </style>
-            </head>
-            <body>
-              <h1>if.emotion Chat Export</h1>
-              ${messages.map(m => `
-                <div class="message ${m.role}">
-                  <div class="role">${m.role === Role.USER ? 'You' : m.role === Role.ASSISTANT ? 'Sergio' : 'System'}</div>
-                  <div>${m.content.replace(/\n/g, '<br>')}</div>
-                </div>
-              `).join('')}
-              <div class="meta">Exported: ${new Date().toLocaleString()}</div>
-            </body>
-            </html>
-          `;
-          printWindow.document.write(htmlContent);
-          printWindow.document.close();
-          printWindow.print();
-        }
-        setIsExportOpen(false);
-        return;
-
-      default:
-        return;
+    if (content) {
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     }
-
-    // Download file
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${filename}.${extension}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
     setIsExportOpen(false);
   };
 
@@ -362,9 +306,8 @@ const App: React.FC = () => {
   }, [messages, isLoading]);
 
   return (
-    <div className="flex h-screen bg-sergio-50 overflow-hidden">
+    <div className="flex h-screen bg-sergio-50 overflow-hidden font-english">
       
-      {/* Sidebar for Persistent Mode */}
       <Sidebar 
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
@@ -375,15 +318,13 @@ const App: React.FC = () => {
         onDeleteSession={handleDeleteSession}
       />
 
-      {/* Main Content */}
       <div className={`flex-1 flex flex-col h-full transition-all duration-300 ${isSidebarOpen ? 'md:ml-[280px]' : ''}`}>
-        <JourneyHeader
+        <JourneyHeader 
           sessionCount={sessions.length}
           isOffTheRecord={isOffTheRecord}
-          onToggleOffTheRecord={handleTogglePrivacy}
           onOpenSidebar={() => setIsSidebarOpen(true)}
           onOpenSettings={() => setIsSettingsOpen(true)}
-          onOpenExport={() => setIsExportOpen(true)}
+          onExport={() => setIsExportOpen(true)}
         />
 
         <main className="flex-1 overflow-y-auto">
@@ -396,12 +337,14 @@ const App: React.FC = () => {
               />
             ))}
             
-            {/* Thinking Indicator */}
             {isLoading && (
-              <div className="flex items-center gap-2 text-sergio-400 text-sm animate-pulse ml-4 font-english">
-                <div className="w-2 h-2 bg-sergio-400 rounded-full animate-bounce" />
-                <div className="w-2 h-2 bg-sergio-400 rounded-full animate-bounce delay-100" />
-                <div className="w-2 h-2 bg-sergio-400 rounded-full animate-bounce delay-200" />
+              <div className="flex items-center gap-2 text-sergio-400 text-sm animate-pulse ml-4 font-english mt-4">
+                <span className="text-xs uppercase tracking-widest">Sergio is thinking</span>
+                <div className="flex gap-1">
+                    <div className="w-1.5 h-1.5 bg-sergio-400 rounded-full animate-bounce" />
+                    <div className="w-1.5 h-1.5 bg-sergio-400 rounded-full animate-bounce delay-100" />
+                    <div className="w-1.5 h-1.5 bg-sergio-400 rounded-full animate-bounce delay-200" />
+                </div>
               </div>
             )}
             
@@ -412,21 +355,27 @@ const App: React.FC = () => {
         <ChatInput 
           onSend={handleSend} 
           isLoading={isLoading} 
-          disabled={availableModels.length === 0 && !isOffTheRecord} // Only disable if no connection and trying to save
+          disabled={availableModels.length === 0 && !isOffTheRecord} 
+          isOffTheRecord={isOffTheRecord}
+          onToggleOffTheRecord={handleTogglePrivacy}
         />
       </div>
 
-      <SettingsModal
+      <SettingsModal 
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
-        onSave={(s) => { setSettings(s); }}
+        onSave={(s) => setSettings(s)}
+        models={availableModels}
+        selectedModel={selectedModel}
+        onSelectModel={setSelectedModel}
       />
-
-      <ExportModal
+      
+      <ExportModal 
         isOpen={isExportOpen}
         onClose={() => setIsExportOpen(false)}
         onExport={handleExport}
+        language={Language.EN} // Defaulting to EN for UI texts in this version
       />
     </div>
   );

@@ -1,5 +1,5 @@
 {
-  "name": "if.emotion",
+  "name": "if-emotion-ux",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,16 +9,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "jspdf": "^2.5.1",
-    "lucide-react": "^0.344.0",
-    "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-markdown": "^9.0.1"
+    "react": "^18.3.1",
+    "react-markdown": "^9.0.1",
+    "lucide-react": "^0.344.0",
+    "jspdf": "^2.5.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
-    "puppeteer": "^24.31.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }
